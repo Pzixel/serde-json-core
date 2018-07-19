@@ -7,7 +7,6 @@ use core::fmt::Write;
 use serde::ser;
 
 use heapless::{String, Vec, ArrayLength};
-use heapless::consts::U41;
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -25,8 +24,6 @@ pub enum Error {
     BufferFull,
     /// IO error
     FormatError(fmt::Error),
-    ///
-    UnitError,
     #[doc(hidden)]
     __Extensible,
 }
@@ -38,12 +35,6 @@ impl ::std::error::Error for Error {
     }
 }
 
-impl From<()> for Error {
-    fn from(_: ()) -> Self {
-        Error::UnitError
-    }
-}
-
 impl fmt::Display for Error {
     fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
         unreachable!()
@@ -52,14 +43,14 @@ impl fmt::Display for Error {
 
 pub(crate) struct Serializer<B: ArrayLength<u8>>
 where
-    B: Unsize<[u8]> + ArrayLength<u8>,
+    B: Unsize<[u8]>,
 {
     buf: Vec<u8, B>,
 }
 
 impl<B> Serializer<B>
 where
-    B: Unsize<[u8]> + ArrayLength<u8>,
+    B: Unsize<[u8]>,
 {
     fn new() -> Self {
         Serializer { buf: Vec::new() }
@@ -125,17 +116,17 @@ macro_rules! serialize_signed {
 }
 
 macro_rules! serialize_float {
-    ($self:ident, $N:ident, $v:expr) => {{
-        let mut buf = String::<$N>::new();
+    ($self:ident, $N:expr, $v:expr) => {{
+        let mut buf = String::<[u8; $N]>::new();
         write!(&mut buf, "{}", $v).map_err(|e| Error::FormatError(e))?;
-        $self.buf.extend_from_slice(buf.as_bytes()).map_err(|e| ())?;
+        $self.buf.extend_from_slice(buf.as_bytes())?;
         Ok(())
     }};
 }
 
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
 where
-    B: Unsize<[u8]> + ArrayLength<u8>,
+    B: Unsize<[u8]>,
 {
     type Ok = ();
     type Error = Error;
@@ -199,12 +190,12 @@ where
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
         // 3.14159265358979323846264338327950288
-        serialize_float!(self, U41, v)
+        serialize_float!(self, 41, v)
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
         // 0.318309886183790671537767526745028724f64
-        serialize_float!(self, U41, v)
+        serialize_float!(self, 41, v)
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok> {
@@ -213,9 +204,9 @@ where
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
-        self.buf.push(b'"').map_err(|_| Error::BufferFull)?;
+        self.buf.push(b'"')?;
         self.buf.extend_from_slice(v.as_bytes())?;
-        self.buf.push(b'"').map_err(|_| Error::BufferFull)?;
+        self.buf.push(b'"')?;
         Ok(())
     }
 
@@ -277,7 +268,7 @@ where
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        self.buf.push(b'[').map_err(|_| Error::BufferFull)?;
+        self.buf.push(b'[')?;
 
         Ok(SerializeSeq::new(self))
     }
@@ -309,7 +300,7 @@ where
     }
 
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
-        self.buf.push(b'{').map_err(|_| Error::BufferFull)?;
+        self.buf.push(b'{')?;
 
         Ok(SerializeStruct::new(self))
     }
@@ -335,7 +326,7 @@ where
 /// Serializes the given data structure as a string of JSON text
 pub fn to_string<B, T>(value: &T) -> Result<String<B>>
 where
-    B: Unsize<[u8]> + ArrayLength<u8>,
+    B: Unsize<[u8]>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -346,7 +337,7 @@ where
 /// Serializes the given data structure as a JSON byte vector
 pub fn to_vec<B, T>(value: &T) -> Result<Vec<u8, B>>
 where
-    B: Unsize<[u8]> + ArrayLength<u8>,
+    B: Unsize<[u8]>,
     T: ser::Serialize + ?Sized,
 {
     let mut ser = Serializer::new();
@@ -432,19 +423,19 @@ impl ser::SerializeStructVariant for Unreachable {
 
 #[cfg(test)]
 mod tests {
-    use heapless::consts::U128;
+    const N: usize = 128;
 
     #[test]
     fn array() {
         assert_eq!(
-            &*super::to_string::<U128, _>(&[0, 1, 2]).unwrap(),
+            &*super::to_string::<[u8; N], _>(&[0, 1, 2]).unwrap(),
             "[0,1,2]"
         );
     }
 
     #[test]
     fn bool() {
-        assert_eq!(&*super::to_string::<U128, _>(&true).unwrap(), "true");
+        assert_eq!(&*super::to_string::<[u8; N], _>(&true).unwrap(), "true");
     }
 
     #[test]
@@ -458,12 +449,12 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Type::Boolean).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Type::Boolean).unwrap(),
             r#""boolean""#
         );
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Type::Number).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Type::Number).unwrap(),
             r#""number""#
         );
     }
@@ -471,7 +462,7 @@ mod tests {
     #[test]
     fn str() {
         assert_eq!(
-            &*super::to_string::<U128, _>("hello").unwrap(),
+            &*super::to_string::<[u8; N], _>("hello").unwrap(),
             r#""hello""#
         );
     }
@@ -484,7 +475,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Led { led: true }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Led { led: true }).unwrap(),
             r#"{"led":true}"#
         );
     }
@@ -497,22 +488,22 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Temperature { temperature: 127 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 127 }).unwrap(),
             r#"{"temperature":127}"#
         );
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Temperature { temperature: -17 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Temperature { temperature: -17 }).unwrap(),
             r#"{"temperature":-17}"#
         );
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Temperature { temperature: -128 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Temperature { temperature: -128 }).unwrap(),
             r#"{"temperature":-128}"#
         );
     }
@@ -525,7 +516,7 @@ mod tests {
         }
 
         assert_eq!(
-            super::to_string::<U128, _>(&Property {
+            super::to_string::<[u8; N], _>(&Property {
                 description: Some("An ambient temperature sensor"),
             }).unwrap(),
             r#"{"description":"An ambient temperature sensor"}"#
@@ -533,7 +524,7 @@ mod tests {
 
         // XXX Ideally this should produce "{}"
         assert_eq!(
-            super::to_string::<U128, _>(&Property { description: None }).unwrap(),
+            super::to_string::<[u8; N], _>(&Property { description: None }).unwrap(),
             r#"{"description":null}"#
         );
     }
@@ -546,7 +537,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Temperature { temperature: 20 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Temperature { temperature: 20 }).unwrap(),
             r#"{"temperature":20}"#
         );
     }
@@ -557,7 +548,7 @@ mod tests {
         struct Empty {}
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Empty {}).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Empty {}).unwrap(),
             r#"{}"#
         );
 
@@ -568,7 +559,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Tuple { a: true, b: false }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
         );
     }
@@ -581,7 +572,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Str { value: '❤' }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Str { value: '❤' }).unwrap(),
             r#"{"value":"❤"}"#
         );
     }
@@ -594,7 +585,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Float { value: 12345.678912_f32 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912_f32 }).unwrap(),
             r#"{"value":12345.679}"#
         );
     }
@@ -607,7 +598,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Float { value: 12345.678912 }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912 }).unwrap(),
             r#"{"value":12345.678912}"#
         );
     }
@@ -623,7 +614,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Bytes { value: vec![1,2,3] }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Bytes { value: vec![1,2,3] }).unwrap(),
             r#"{"value":[1,2,3]}"#
         );
     }
@@ -639,7 +630,7 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<U128, _>(&Str { value: "hello".into() }).unwrap(),
+            &*super::to_string::<[u8; N], _>(&Str { value: "hello".into() }).unwrap(),
             r#"{"value":"hello"}"#
         );
     }
