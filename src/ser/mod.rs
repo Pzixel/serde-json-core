@@ -252,12 +252,12 @@ where
     fn serialize_newtype_struct<T: ?Sized>(
         self,
         _name: &'static str,
-        _value: &T,
+        value: &T,
     ) -> Result<Self::Ok>
     where
         T: ser::Serialize,
     {
-        unreachable!()
+        value.serialize(self)
     }
 
     fn serialize_newtype_variant<T: ?Sized>(
