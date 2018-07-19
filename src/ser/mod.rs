@@ -204,8 +204,9 @@ where
         serialize_float!(self, 41, v)
     }
 
-    fn serialize_char(self, _v: char) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_char(self, v: char) -> Result<Self::Ok> {
+        let mut buf = [0; 4];
+        self.serialize_str(v.encode_utf8(&mut buf))
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok> {
@@ -590,8 +591,8 @@ mod tests {
         }
 
         assert_eq!(
-            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912 }).unwrap(),
-            r#"{"value":12345.678912}"#
+            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912_f32 }).unwrap(),
+            r#"{"value":12345.679}"#
         );
     }
 
