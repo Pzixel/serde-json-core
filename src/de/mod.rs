@@ -252,12 +252,56 @@ macro_rules! deserialize_signed {
                                 .ok_or(Error::InvalidNumber)?
                                 .checked_add((c - b'0') as $ixx * if signed { -1 } else { 1 })
                                 .ok_or(Error::InvalidNumber)?;
-                        }
+                        },
                         _ => return $visitor.$visit_ixx(number),
                     }
                 }
             }
             _ => return Err(Error::InvalidType),
+        }
+    }};
+}
+
+macro_rules! deserialize_float {
+    ($self:ident, $visitor:ident, $ixx:ident, $visit_ixx:ident) => {{
+        let peek = $self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+
+        match peek {
+            b'-' => Err(Error::InvalidNumber),
+            b'0' => {
+                $self.eat_char();
+                $visitor.$visit_ixx(0.0)
+            }
+            b'1'...b'9' => {
+                $self.eat_char();
+
+                let mut number = (peek - b'0') as $ixx;
+                loop {
+                    match $self.peek() {
+                        Some(c @ b'0'...b'9') => {
+                            $self.eat_char();
+                            number = number * 10.0 + (c - b'0') as $ixx;
+                        }
+                        Some(b'.') => break,
+                        _ => return $visitor.$visit_ixx(number),
+                    }
+                }
+
+                $self.eat_char();
+                let mut fraction = 0.1;
+
+                loop {
+                    match $self.peek() {
+                        Some(c @ b'0'...b'9') => {
+                            $self.eat_char();
+                            number = number + (c - b'0') as $ixx * fraction;
+                            fraction *= 0.1;
+                        },
+                        _ => return $visitor.$visit_ixx(number),
+                    }
+                }
+            }
+            _ => Err(Error::InvalidType),
         }
     }};
 }
@@ -349,18 +393,18 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         deserialize_unsigned!(self, visitor, u64, visit_u64)
     }
 
-    fn deserialize_f32<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        deserialize_float!(self, visitor, f32, visit_f32)
     }
 
-    fn deserialize_f64<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        deserialize_float!(self, visitor, f64, visit_f64)
     }
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
@@ -730,6 +774,32 @@ mod tests {
         assert_eq!(
             super::from_str(r#"{"value":"❤"}"#),
             Ok(Str { value: '❤' })
+        );
+    }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Float {
+            value: f32,
+        }
+
+        assert_eq!(
+            super::from_str(r#"{"value":12345.678912}"#),
+            Ok(Float { value: 12345.678912 })
+        );
+    }
+
+    #[test]
+    fn struct_f64() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Float {
+            value: f64,
+        }
+
+        assert_eq!(
+            super::from_str(r#"{"value":12345.678912}"#),
+            Ok(Float { value: 12345.678912 })
         );
     }
 

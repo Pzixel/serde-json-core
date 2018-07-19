@@ -40,13 +40,9 @@
 //!
 //! - (De)serialization from / into IO objects once `core::io::{Read,Write}` becomes a thing.
 //!
-//! # Non-features
+//! # Differences from upstream
 //!
-//! This is explicitly out of scope
-//!
-//! - Anything that involves dynamic memory allocation
-//!   - Like the dynamic [`Value`](https://docs.rs/serde_json/1.0.11/serde_json/enum.Value.html)
-//!     type
+//! Dynamic memory features are enabled via "alloc" feature
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![feature(unsize)]

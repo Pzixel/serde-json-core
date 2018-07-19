@@ -2,6 +2,7 @@
 
 use core::marker::Unsize;
 use core::{fmt, mem};
+use core::fmt::Write;
 
 use serde::ser;
 
@@ -21,6 +22,8 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 pub enum Error {
     /// Buffer is full
     BufferFull,
+    /// IO error
+    FormatError(fmt::Error),
     #[doc(hidden)]
     __Extensible,
 }
@@ -118,6 +121,15 @@ macro_rules! serialize_signed {
     }};
 }
 
+macro_rules! serialize_float {
+    ($self:ident, $N:expr, $v:expr) => {{
+        let mut buf = String::<[u8; $N]>::new();
+        write!(&mut buf, "{}", $v).map_err(|e| Error::FormatError(e))?;
+        $self.buf.extend_from_slice(buf.as_bytes())?;
+        Ok(())
+    }};
+}
+
 impl<'a, B> ser::Serializer for &'a mut Serializer<B>
 where
     B: Unsize<[u8]>,
@@ -182,12 +194,14 @@ where
         serialize_unsigned!(self, 20, v)
     }
 
-    fn serialize_f32(self, _v: f32) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f32(self, v: f32) -> Result<Self::Ok> {
+        // 3.14159265358979323846264338327950288
+        serialize_float!(self, 41, v)
     }
 
-    fn serialize_f64(self, _v: f64) -> Result<Self::Ok> {
-        unreachable!()
+    fn serialize_f64(self, v: f64) -> Result<Self::Ok> {
+        // 0.318309886183790671537767526745028724f64
+        serialize_float!(self, 41, v)
     }
 
     fn serialize_char(self, _v: char) -> Result<Self::Ok> {
@@ -552,6 +566,45 @@ mod tests {
         assert_eq!(
             &*super::to_string::<[u8; N], _>(&Tuple { a: true, b: false }).unwrap(),
             r#"{"a":true,"b":false}"#
+        );
+    }
+
+    #[test]
+    fn struct_char() {
+        #[derive(Serialize)]
+        struct Str {
+            value: char,
+        }
+
+        assert_eq!(
+            &*super::to_string::<[u8; N], _>(&Str { value: '❤' }).unwrap(),
+            r#"{"value":"❤"}"#
+        );
+    }
+
+    #[test]
+    fn struct_f32() {
+        #[derive(Serialize)]
+        struct Float {
+            value: f32,
+        }
+
+        assert_eq!(
+            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912 }).unwrap(),
+            r#"{"value":12345.678912}"#
+        );
+    }
+
+    #[test]
+    fn struct_f64() {
+        #[derive(Serialize)]
+        struct Float {
+            value: f64,
+        }
+
+        assert_eq!(
+            &*super::to_string::<[u8; N], _>(&Float { value: 12345.678912 }).unwrap(),
+            r#"{"value":12345.678912}"#
         );
     }
 
