@@ -554,4 +554,36 @@ mod tests {
             r#"{"a":true,"b":false}"#
         );
     }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn struct_vec() {
+        use alloc::prelude::*;
+
+        #[derive(Serialize)]
+        struct Bytes {
+            value: Vec<u8>,
+        }
+
+        assert_eq!(
+            &*super::to_string::<[u8; N], _>(&Bytes { value: vec![1,2,3] }).unwrap(),
+            r#"{"value":[1,2,3]}"#
+        );
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn struct_string() {
+        use alloc::prelude::*;
+
+        #[derive(Serialize)]
+        struct Str {
+            value: String,
+        }
+
+        assert_eq!(
+            &*super::to_string::<[u8; N], _>(&Str { value: "hello".into() }).unwrap(),
+            r#"{"value":"hello"}"#
+        );
+    }
 }

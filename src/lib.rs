@@ -50,7 +50,15 @@
 #![deny(missing_docs)]
 #![deny(warnings)]
 #![feature(unsize)]
+#![feature(custom_attribute)]
+#![feature(use_extern_macros)]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![feature(alloc)]
+
+#[cfg(feature = "alloc")]
+#[allow(unused)]
+#[macro_use]
+extern crate alloc;
 
 #[cfg(feature = "std")]
 extern crate core;

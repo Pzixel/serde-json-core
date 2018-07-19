@@ -363,11 +363,11 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         unreachable!()
     }
 
-    fn deserialize_char<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        self.deserialize_str(visitor)
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
@@ -385,11 +385,24 @@ impl<'a, 'de> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         }
     }
 
-    fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unreachable!()
+        if cfg!(feature = "alloc") {
+            let peek = self.parse_whitespace().ok_or(Error::EofWhileParsingValue)?;
+
+            match peek {
+                b'"' => {
+                    self.eat_char();
+                    visitor.visit_str(self.parse_str()?)
+                }
+                _ => Err(Error::InvalidType),
+            }
+        }
+        else {
+            unreachable!()
+        }
     }
 
     fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
@@ -705,6 +718,60 @@ mod tests {
         // out of range
         assert!(super::from_str::<Temperature>(r#"{ "temperature": 256 }"#).is_err());
         assert!(super::from_str::<Temperature>(r#"{ "temperature": -1 }"#).is_err());
+    }
+
+    #[test]
+    fn struct_char() {
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Str {
+            value: char,
+        }
+
+        assert_eq!(
+            super::from_str(r#"{"value":"❤"}"#),
+            Ok(Str { value: '❤' })
+        );
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn struct_vec() {
+        use alloc::prelude::*;
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Bytes {
+            value: Vec<u8>,
+        }
+
+        assert_eq!(
+            super::from_str(r#"{"value":[1,2,3]}"#),
+            Ok(Bytes { value: vec![1,2,3] })
+        );
+
+        assert_eq!(
+            super::from_str(r#"{"value":[]}"#),
+            Ok(Bytes { value: vec![] })
+        );
+
+        // invalid json
+        assert!(super::from_str::<Bytes>(r#"{"value":"hello"}"#).is_err());
+        assert!(super::from_str::<Bytes>(r#"{"value":1}"#).is_err());
+    }
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn struct_string() {
+        use alloc::prelude::*;
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct Str {
+            value: String,
+        }
+
+        assert_eq!(
+            super::from_str(r#"{"value":"hello"}"#),
+            Ok(Str { value: "hello".into() })
+        );
     }
 
     // See https://iot.mozilla.org/wot/#thing-resource
