@@ -4,15 +4,15 @@ name = "serde-json-core"
 version = "0.1.0"
 
 [dependencies]
-heapless = "0.3.6"
+heapless = "0.2.4"
 
 [dependencies.serde]
 default-features = false
-version = "1.0.70"
+version = "1.0.33"
 
 [dev-dependencies]
-serde_derive = "1.0.70"
+serde_derive = "1.0.33"
 
 [features]
 std = ["serde/std"]
-alloc = []
+alloc = ["serde/alloc"]

@@ -6,7 +6,7 @@ use core::fmt::Write;
 
 use serde::ser;
 
-use heapless::{String, Vec, ArrayLength};
+use heapless::{BufferFullError, String, Vec};
 
 use self::seq::SerializeSeq;
 use self::struct_::SerializeStruct;
@@ -35,13 +35,19 @@ impl ::std::error::Error for Error {
     }
 }
 
+impl From<BufferFullError> for Error {
+    fn from(_: BufferFullError) -> Self {
+        Error::BufferFull
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
         unreachable!()
     }
 }
 
-pub(crate) struct Serializer<B: ArrayLength<u8>>
+pub(crate) struct Serializer<B>
 where
     B: Unsize<[u8]>,
 {
